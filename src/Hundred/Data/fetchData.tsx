@@ -401,12 +401,11 @@ export const fetchData = async ({
         return true;
     });
 
-    const nativeToken = markets.find((a) => a.toLowerCase() === network.nativeTokenMarketAddress.toLowerCase());
+    // const nativeToken = markets.find((a) => a.toLowerCase() === network.nativeTokenMarketAddress.toLowerCase());
 
+    const nativeToken = '0xe33E3bA2440EE1B03D3BE8B0c31E4005DC79fD6b';
     if (nativeToken) {
-        const cToken = network.isMinterV2
-            ? new Contract(nativeToken, CTOKEN_V2_ABI)
-            : new Contract(nativeToken, CTOKEN_ABI);
+        const cToken = false ? new Contract(nativeToken, CTOKEN_V2_ABI) : new Contract(nativeToken, CTOKEN_ABI);
         calls.push(
             cToken.getAccountSnapshot(userAddress),
             cToken.exchangeRateStored(),
@@ -442,7 +441,20 @@ export const fetchData = async ({
 
     console.log('notNativeMarkets -- 1', notNativeMarkets);
 
-    notNativeMarkets = ['0xC2e05415588ae8E93477EF7d78A6be8AB2c4da0f'];
+    const CTokenKeyValues = {
+        // cMSTR: '0xb2Efe1DF1281Ad3ca83d7BB7FFeDC9A2C22e5097',
+        cDUSD: '0xB4d5f744DA49b35d20cf37b0dd1C91481eE072B3',
+        cBTC: '0xce3a9Aa3eD8E046Dee4029700EA52C43DE6B8075',
+        // cETH: '0xe33E3bA2440EE1B03D3BE8B0c31E4005DC79fD6b',
+        cUSDC: '0xC2e05415588ae8E93477EF7d78A6be8AB2c4da0f',
+        cUSDT: '0xb0f71c66F0CB11335b6394c36E7D5187e1Cb4a9D',
+        // cCOMP: '0xe33E3bA2440EE1B03D3BE8B0c31E4005DC79fD6b',
+        cETHDFI: '0xc4C2A79328fB6Bbf6dAD8304eAE12E0Fd21FEa03',
+        cTSLA: '0xa000E75F769fC75B3F0F96b1A10dE2F6E1C2FDB5',
+        cSPY: '0x40094b8c70C4070aDBEa4A1BAdfba5a893062595',
+        cSEA_USDC_LP: '0x29546d4DBAaEAe190d3eFa22Da48E475FC091E29',
+    };
+    notNativeMarkets = Object.values(CTokenKeyValues);
     let underlyingAddresses: string[] = [];
     if (!marketsData || markets.length !== [...marketsData].length) {
         console.log('here test 1');

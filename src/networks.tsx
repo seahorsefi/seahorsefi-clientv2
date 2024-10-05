@@ -326,6 +326,7 @@ const NETWORKS: NetworkData = true
               chainId: 1130,
               network: 'Dmclive',
               logo: Logos['OPT'],
+              blocksPerYear: 2880 * 365,
               networkParams: {
                   chainId: '0x46A',
                   chainName: 'Dmclive',
