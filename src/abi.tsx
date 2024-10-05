@@ -895,15 +895,6 @@ const CETHER_ABI = [
     {
         constant: true,
         inputs: [],
-        name: 'supplyRatePerBlock',
-        outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-        payable: false,
-        stateMutability: 'view',
-        type: 'function',
-    },
-    {
-        constant: true,
-        inputs: [],
         name: 'symbol',
         outputs: [{ internalType: 'string', name: '', type: 'string' }],
         payable: false,
@@ -1317,21 +1308,7 @@ const CTOKEN_ABI = [
         stateMutability: 'nonpayable',
         type: 'function',
     },
-    {
-        constant: false,
-        inputs: [],
-        name: 'supplyRatePerBlock',
-        outputs: [
-            {
-                internalType: 'uint256',
-                name: '',
-                type: 'uint256',
-            },
-        ],
-        payable: false,
-        stateMutability: 'view',
-        type: 'function',
-    },
+
     {
         constant: false,
         inputs: [{ internalType: 'uint256', name: 'borrowAmount', type: 'uint256' }],
