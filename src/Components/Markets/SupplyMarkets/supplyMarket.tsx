@@ -3,13 +3,13 @@ import '../style.css';
 import SupplyMarketRow from './supplyMarketRow';
 import { compareSymbol, compareLiquidity, compareHndAPR } from '../../../helpers';
 import { BigNumber } from '../../../bigNumber';
-import { CTokenInfo } from '../../../Classes/cTokenClass';
+import { CTokenInfo, CTokenSpinner } from '../../../Classes/cTokenClass';
 import ReactTooltip from 'react-tooltip';
 import { useHundredDataContext } from '../../../Types/hundredDataContext';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css'; // optional
 
-import { Space, Switch, Table, Tag } from 'antd';
+import { Avatar, Space, Switch, Table, Tag } from 'antd';
 import type { TableProps } from 'antd';
 import { useWeb3React } from '@web3-react/core';
 import { providers } from 'ethers';
@@ -25,11 +25,6 @@ interface Props {
 
 interface DataType {
     key: string;
-    asset: string;
-    apr: string;
-    suppliedBalance: string;
-    walletBalance: string;
-    isCollateral: boolean;
     isActive: boolean;
     market: CTokenInfo;
     handleOpenEnterMarkerDialog: () => void;
@@ -40,28 +35,33 @@ const columns: TableProps<DataType>['columns'] = [
         title: 'Asset',
         dataIndex: 'asset',
         key: 'asset',
-        render: (text) => <a>{text}</a>,
+        render: (_, { market }) => (
+            <div className="flex items-center space-x-[10px]">
+                <Avatar
+                    style={{ verticalAlign: 'middle', objectFit: 'fill' }}
+                    size="default"
+                    src={market.underlying.logo}
+                ></Avatar>
+                <a>{market.underlying.symbol}</a>
+            </div>
+        ),
     },
-    {
-        title: 'Active',
-        key: 'isActive',
-        dataIndex: 'isActive',
-        render: (_, { isActive }) => {
-            // let color = record.length > 5 ? 'geekblue' : 'green';
-            // if (record === 'loser') {
-            //     color = 'volcano';
-            // }
-            const color = isActive ? 'green' : 'volcano';
-            const tag = isActive ? 'active' : 'inactive';
-            return (
-                <>
-                    <Tag color={color} key={tag}>
-                        {tag.toUpperCase()}
-                    </Tag>
-                </>
-            );
-        },
-    },
+    // {
+    //     title: 'Active',
+    //     key: 'isActive',
+    //     dataIndex: 'isActive',
+    //     render: (_, { isActive }) => {
+    //         const color = isActive ? 'green' : 'volcano';
+    //         const tag = isActive ? 'active' : 'inactive';
+    //         return (
+    //             <>
+    //                 <Tag color={color} key={tag}>
+    //                     {tag.toUpperCase()}
+    //                 </Tag>
+    //             </>
+    //         );
+    //     },
+    // },
     {
         title: 'Apr',
         dataIndex: 'apr',
@@ -91,7 +91,7 @@ const columns: TableProps<DataType>['columns'] = [
         ),
     },
     {
-        title: 'Walelt Balance',
+        title: 'Wallet Balance',
         dataIndex: 'walletBalance',
         key: 'walletBalance',
         render: (_, { market }) => (
@@ -149,15 +149,22 @@ const SupplyMarket: React.FC<Props> = (props: Props) => {
         return;
     };
 
+    const handleOpenSupplyMarketDialog = (market: CTokenInfo, spinners?: CTokenSpinner) => {
+        if (!account) {
+            setShowWallets(true);
+            return;
+        }
+
+        if (market && !spinners?.spinner) {
+            props.supplyMarketDialog(market);
+        }
+        return;
+    };
+
     const constructData = (cTokenInfos: CTokenInfo[]): DataType[] => {
         return cTokenInfos.map((market) => {
             return {
                 key: '1',
-                asset: market?.underlying.symbol,
-                apr: '',
-                suppliedBalance: 'string',
-                walletBalance: 'string',
-                isCollateral: true,
                 isActive: true,
                 market: market,
                 handleOpenEnterMarkerDialog: () => handleOpenEnterMarkerDialog(market),
@@ -190,228 +197,261 @@ const SupplyMarket: React.FC<Props> = (props: Props) => {
         .sort(compareLiquidity)
         .sort(compareHndAPR);
 
+    const unfilledMarkets = [...marketsData]
+        ?.filter((item) => {
+            const gauge = [...gaugesV4Data].find((x) => x?.generalData.lpTokenUnderlying === item.underlying.address);
+            const backstopGauge = [...gaugesV4Data]?.find(
+                (g) => g?.generalData.lpTokenUnderlying.toLowerCase() === item?.pTokenAddress.toLowerCase(),
+            );
+
+            if (
+                item.supplyBalance.gt(BigNumber.from('0')) ||
+                item.backstop?.userBalance.gt(BigNumber.from('0')) ||
+                gauge?.userStakeBalance.gt(BigNumber.from('0')) ||
+                backstopGauge?.userStakeBalance.gt(BigNumber.from('0'))
+            )
+                return false;
+            return true;
+        })
+        .filter((item) => {
+            if (props.searchAssets.trim() === '') return true;
+            if (
+                item.underlying.name.toLowerCase().includes(props.searchAssets.toLowerCase().trim()) ||
+                item.underlying.symbol.toLowerCase().includes(props.searchAssets.toLowerCase().trim())
+            )
+                return true;
+            return false;
+        })
+        .sort(compareSymbol)
+        .sort(compareLiquidity)
+        .sort(compareHndAPR);
+
     const contructedFilledData = constructData(filledMarkets);
 
-    console.log('filledMarkets ', filledMarkets);
+    const contructedUnFilledData = constructData(unfilledMarkets);
 
     const handleOnRowClick = (data: DataType) => {
-        console.log('data here', data);
+        const spinners = [...marketsSpinners].find((x) => x.symbol === data.market.underlying.symbol);
+
+        handleOpenSupplyMarketDialog(data.market, spinners);
     };
 
     return (
         <div className="market-content">
             <Table<DataType>
                 columns={columns}
-                dataSource={contructedFilledData}
+                dataSource={contructedFilledData.concat(contructedUnFilledData)}
                 onRow={(r) => ({
-                    onClick: () => console.log('r data', r),
+                    onClick: () => handleOnRowClick(r),
                 })}
             />
-            ;
-            <table className="market-table">
-                <thead className="market-table-header">
-                    <tr>
-                        <th colSpan={5}>
-                            <div className="seperator" />
-                        </th>
-                    </tr>
-                    <tr className="market-table-header-headers">
-                        <th className="market-header-title">Asset</th>
-                        <th className="market-header-title">
-                            APR
-                            <Tippy
-                                content={
-                                    <div style={{ width: '12rem' }}>
-                                        Learn about APR{' '}
-                                        <a
-                                            className="a"
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            href="https://docs.hundred.finance/protocol-governance/hnd-staking-and-locking/boosting-apr-with-vehnd"
-                                        >
-                                            here
-                                        </a>
-                                    </div>
-                                }
-                                interactive={true}
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    width="16"
-                                    height="16"
-                                    fill="currentColor"
-                                    className="info-circle"
-                                    viewBox="0 0 16 16"
-                                    style={{ userSelect: 'none', outline: 'none', cursor: 'pointer' }}
-                                >
-                                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
-                                    <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
-                                </svg>
-                            </Tippy>
-                        </th>
-
-                        <th className="market-header-title">Supplied</th>
-                        <th className="market-header-title">Wallet</th>
-                        <th className="market-header-title">Collateral</th>
-                    </tr>
-                    <tr>
-                        <th colSpan={5}>
-                            <div className="seperator" />
-                        </th>
-                    </tr>
-                </thead>
-                {props.myAssets ? (
-                    <tbody className="market-table-content">
-                        {[...marketsData].length > 0 && [...marketsSpinners].length > 0
-                            ? filledMarkets.map((market, index) => {
-                                  const spinners = [...marketsSpinners].find(
-                                      (x) => x.symbol === market.underlying.symbol,
-                                  );
-                                  return (
-                                      <SupplyMarketRow
-                                          key={index}
-                                          tooltip={`supply-${index}`}
-                                          market={market}
-                                          marketSpinners={spinners}
-                                          hasbackstopGauge={
-                                              [...gaugesV4Data]?.find(
-                                                  (g) =>
-                                                      g?.generalData.lpTokenUnderlying.toLowerCase() ===
-                                                      market?.pTokenAddress.toLowerCase(),
-                                              ) !== undefined
-                                          }
-                                          enterMarketDialog={props.enterMarketDialog}
-                                          supplyMarketDialog={props.supplyMarketDialog}
-                                      />
-                                  );
-                              })
-                            : null}
-                    </tbody>
-                ) : props.allAssets ? (
-                    <tbody className="market-table-content">
-                        {[...marketsData].length > 0 && [...marketsSpinners].length > 0
-                            ? [...marketsData]
-                                  ?.filter((item) => {
-                                      const gauge = [...gaugesV4Data].find(
-                                          (x) => x?.generalData.lpTokenUnderlying === item.underlying.address,
-                                      );
-                                      const backstopGauge = [...gaugesV4Data]?.find(
-                                          (g) =>
-                                              g?.generalData.lpTokenUnderlying.toLowerCase() ===
-                                              item?.pTokenAddress.toLowerCase(),
-                                      );
-
-                                      if (
-                                          item.supplyBalance.gt(BigNumber.from('0')) ||
-                                          item.backstop?.userBalance.gt(BigNumber.from('0')) ||
-                                          gauge?.userStakeBalance.gt(BigNumber.from('0')) ||
-                                          backstopGauge?.userStakeBalance.gt(BigNumber.from('0'))
-                                      )
-                                          return true;
-                                      return false;
-                                  })
-                                  .filter((item) => {
-                                      if (props.searchAssets.trim() === '') return true;
-                                      if (
-                                          item.underlying.name
-                                              .toLowerCase()
-                                              .includes(props.searchAssets.toLowerCase().trim())
-                                      )
-                                          return true;
-                                      return false;
-                                  })
-                                  .sort(compareSymbol)
-                                  .sort(compareLiquidity)
-                                  .sort(compareHndAPR)
-                                  .map((market, index) => {
-                                      const spinners = [...marketsSpinners].find(
-                                          (x) => x.symbol === market.underlying.symbol,
-                                      );
-                                      return (
-                                          <SupplyMarketRow
-                                              key={index}
-                                              tooltip={`supply-${index}`}
-                                              market={market}
-                                              marketSpinners={spinners}
-                                              hasbackstopGauge={
-                                                  [...gaugesV4Data]?.find(
-                                                      (g) =>
-                                                          g?.generalData.lpTokenUnderlying.toLowerCase() ===
-                                                          market?.pTokenAddress.toLowerCase(),
-                                                  ) !== undefined
-                                              }
-                                              enterMarketDialog={props.enterMarketDialog}
-                                              supplyMarketDialog={props.supplyMarketDialog}
-                                          />
-                                      );
-                                  })
-                            : null}
-
-                        {marketsData.length > 0 && marketsSpinners.length > 0
-                            ? [...marketsData]
-                                  ?.filter((item) => {
-                                      const gauge = [...gaugesV4Data].find(
-                                          (x) => x?.generalData.lpTokenUnderlying === item.underlying.address,
-                                      );
-                                      const backstopGauge = [...gaugesV4Data]?.find(
-                                          (g) =>
-                                              g?.generalData.lpTokenUnderlying.toLowerCase() ===
-                                              item?.pTokenAddress.toLowerCase(),
-                                      );
-
-                                      if (
-                                          item.supplyBalance.gt(BigNumber.from('0')) ||
-                                          item.backstop?.userBalance.gt(BigNumber.from('0')) ||
-                                          gauge?.userStakeBalance.gt(BigNumber.from('0')) ||
-                                          backstopGauge?.userStakeBalance.gt(BigNumber.from('0'))
-                                      )
-                                          return false;
-                                      return true;
-                                  })
-                                  .filter((item) => {
-                                      if (props.searchAssets.trim() === '') return true;
-                                      if (
-                                          item.underlying.name
-                                              .toLowerCase()
-                                              .includes(props.searchAssets.toLowerCase().trim()) ||
-                                          item.underlying.symbol
-                                              .toLowerCase()
-                                              .includes(props.searchAssets.toLowerCase().trim())
-                                      )
-                                          return true;
-                                      return false;
-                                  })
-                                  .sort(compareSymbol)
-                                  .sort(compareLiquidity)
-                                  .sort(compareHndAPR)
-                                  .map((market, index) => {
-                                      const spinners = [...marketsSpinners].find(
-                                          (x) => x.symbol === market.underlying.symbol,
-                                      );
-                                      return (
-                                          <SupplyMarketRow
-                                              key={index}
-                                              tooltip={`not-supply-${index}`}
-                                              market={market}
-                                              marketSpinners={spinners}
-                                              hasbackstopGauge={
-                                                  [...gaugesV4Data]?.find(
-                                                      (g) =>
-                                                          g?.generalData.lpTokenUnderlying.toLowerCase() ===
-                                                          market?.pTokenAddress.toLowerCase(),
-                                                  ) !== undefined
-                                              }
-                                              enterMarketDialog={props.enterMarketDialog}
-                                              supplyMarketDialog={props.supplyMarketDialog}
-                                          />
-                                      );
-                                  })
-                            : null}
-                    </tbody>
-                ) : null}
-            </table>
         </div>
     );
 };
 
 export default SupplyMarket;
+
+{
+    /* <table className="market-table">
+<thead className="market-table-header">
+    <tr>
+        <th colSpan={5}>
+            <div className="seperator" />
+        </th>
+    </tr>
+    <tr className="market-table-header-headers">
+        <th className="market-header-title">Asset</th>
+        <th className="market-header-title">
+            APR
+            <Tippy
+                content={
+                    <div style={{ width: '12rem' }}>
+                        Learn about APR{' '}
+                        <a
+                            className="a"
+                            target="_blank"
+                            rel="noreferrer"
+                            href="https://docs.hundred.finance/protocol-governance/hnd-staking-and-locking/boosting-apr-with-vehnd"
+                        >
+                            here
+                        </a>
+                    </div>
+                }
+                interactive={true}
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    fill="currentColor"
+                    className="info-circle"
+                    viewBox="0 0 16 16"
+                    style={{ userSelect: 'none', outline: 'none', cursor: 'pointer' }}
+                >
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+                    <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z" />
+                </svg>
+            </Tippy>
+        </th>
+
+        <th className="market-header-title">Supplied</th>
+        <th className="market-header-title">Wallet</th>
+        <th className="market-header-title">Collateral</th>
+    </tr>
+    <tr>
+        <th colSpan={5}>
+            <div className="seperator" />
+        </th>
+    </tr>
+</thead>
+{props.myAssets ? (
+    <tbody className="market-table-content">
+        {[...marketsData].length > 0 && [...marketsSpinners].length > 0
+            ? filledMarkets.map((market, index) => {
+                  const spinners = [...marketsSpinners].find(
+                      (x) => x.symbol === market.underlying.symbol,
+                  );
+                  return (
+                      <SupplyMarketRow
+                          key={index}
+                          tooltip={`supply-${index}`}
+                          market={market}
+                          marketSpinners={spinners}
+                          hasbackstopGauge={
+                              [...gaugesV4Data]?.find(
+                                  (g) =>
+                                      g?.generalData.lpTokenUnderlying.toLowerCase() ===
+                                      market?.pTokenAddress.toLowerCase(),
+                              ) !== undefined
+                          }
+                          enterMarketDialog={props.enterMarketDialog}
+                          supplyMarketDialog={props.supplyMarketDialog}
+                      />
+                  );
+              })
+            : null}
+    </tbody>
+) : props.allAssets ? (
+    <tbody className="market-table-content">
+        {[...marketsData].length > 0 && [...marketsSpinners].length > 0
+            ? [...marketsData]
+                  ?.filter((item) => {
+                      const gauge = [...gaugesV4Data].find(
+                          (x) => x?.generalData.lpTokenUnderlying === item.underlying.address,
+                      );
+                      const backstopGauge = [...gaugesV4Data]?.find(
+                          (g) =>
+                              g?.generalData.lpTokenUnderlying.toLowerCase() ===
+                              item?.pTokenAddress.toLowerCase(),
+                      );
+
+                      if (
+                          item.supplyBalance.gt(BigNumber.from('0')) ||
+                          item.backstop?.userBalance.gt(BigNumber.from('0')) ||
+                          gauge?.userStakeBalance.gt(BigNumber.from('0')) ||
+                          backstopGauge?.userStakeBalance.gt(BigNumber.from('0'))
+                      )
+                          return true;
+                      return false;
+                  })
+                  .filter((item) => {
+                      if (props.searchAssets.trim() === '') return true;
+                      if (
+                          item.underlying.name
+                              .toLowerCase()
+                              .includes(props.searchAssets.toLowerCase().trim())
+                      )
+                          return true;
+                      return false;
+                  })
+                  .sort(compareSymbol)
+                  .sort(compareLiquidity)
+                  .sort(compareHndAPR)
+                  .map((market, index) => {
+                      const spinners = [...marketsSpinners].find(
+                          (x) => x.symbol === market.underlying.symbol,
+                      );
+                      return (
+                          <SupplyMarketRow
+                              key={index}
+                              tooltip={`supply-${index}`}
+                              market={market}
+                              marketSpinners={spinners}
+                              hasbackstopGauge={
+                                  [...gaugesV4Data]?.find(
+                                      (g) =>
+                                          g?.generalData.lpTokenUnderlying.toLowerCase() ===
+                                          market?.pTokenAddress.toLowerCase(),
+                                  ) !== undefined
+                              }
+                              enterMarketDialog={props.enterMarketDialog}
+                              supplyMarketDialog={props.supplyMarketDialog}
+                          />
+                      );
+                  })
+            : null}
+
+        {marketsData.length > 0 && marketsSpinners.length > 0
+            ? [...marketsData]
+                  ?.filter((item) => {
+                      const gauge = [...gaugesV4Data].find(
+                          (x) => x?.generalData.lpTokenUnderlying === item.underlying.address,
+                      );
+                      const backstopGauge = [...gaugesV4Data]?.find(
+                          (g) =>
+                              g?.generalData.lpTokenUnderlying.toLowerCase() ===
+                              item?.pTokenAddress.toLowerCase(),
+                      );
+
+                      if (
+                          item.supplyBalance.gt(BigNumber.from('0')) ||
+                          item.backstop?.userBalance.gt(BigNumber.from('0')) ||
+                          gauge?.userStakeBalance.gt(BigNumber.from('0')) ||
+                          backstopGauge?.userStakeBalance.gt(BigNumber.from('0'))
+                      )
+                          return false;
+                      return true;
+                  })
+                  .filter((item) => {
+                      if (props.searchAssets.trim() === '') return true;
+                      if (
+                          item.underlying.name
+                              .toLowerCase()
+                              .includes(props.searchAssets.toLowerCase().trim()) ||
+                          item.underlying.symbol
+                              .toLowerCase()
+                              .includes(props.searchAssets.toLowerCase().trim())
+                      )
+                          return true;
+                      return false;
+                  })
+                  .sort(compareSymbol)
+                  .sort(compareLiquidity)
+                  .sort(compareHndAPR)
+                  .map((market, index) => {
+                      const spinners = [...marketsSpinners].find(
+                          (x) => x.symbol === market.underlying.symbol,
+                      );
+                      return (
+                          <SupplyMarketRow
+                              key={index}
+                              tooltip={`not-supply-${index}`}
+                              market={market}
+                              marketSpinners={spinners}
+                              hasbackstopGauge={
+                                  [...gaugesV4Data]?.find(
+                                      (g) =>
+                                          g?.generalData.lpTokenUnderlying.toLowerCase() ===
+                                          market?.pTokenAddress.toLowerCase(),
+                                  ) !== undefined
+                              }
+                              enterMarketDialog={props.enterMarketDialog}
+                              supplyMarketDialog={props.supplyMarketDialog}
+                          />
+                      );
+                  })
+            : null}
+    </tbody>
+) : null}
+</table> */
+}
